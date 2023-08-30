@@ -1,0 +1,55 @@
+# ACGM Configuration
+version: 0.1
+
+# Database
+database:
+  host: 192.168.1.151
+  port: 3306
+  user: root
+  database: acgm
+  password: cma32nil!
+  charset: utf8mb4
+  parse_time: true
+
+# ACGM logs
+logs:
+  retention: 3d
+  dir: /var/log/acgm
+  file: agent.log
+  max_size: 1M
+
+# Metrics
+metrics:
+  collect_interval: 1000
+  cpu: true
+  mem: true
+  disk: true
+  net: true
+  requests:
+    access: true
+    errors: true
+    duration: true
+    status: true
+    nginx:
+      active: true
+      writing: true
+      waiting: true
+
+# Agent Settings
+settings:
+  service: false
+  ipv4only: false
+
+nginx:
+  sites_available: /etc/nginx/sites-available
+  sites_enabled: /etc/nginx/sites-enabled
+  test: nginx -t
+  reload: nginx -s reload
+  logs: /var/log
+  error: "{server}-error.log"
+  access: "{server}-access.log"
+  default_root: /var/www/html
+  default_file: index.nginx-debian.html
+  ssl_dir: /etc/nginx/ssl
+
+
