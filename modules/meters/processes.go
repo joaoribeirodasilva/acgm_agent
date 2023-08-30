@@ -44,10 +44,10 @@ func (m *Meter) loop() {
 
 	m.running = true
 	for {
-
 		if m.stop_requested {
 			break
 		}
+
 	}
 	m.stop_requested = false
 	m.running = false
