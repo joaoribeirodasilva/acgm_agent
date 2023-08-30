@@ -59,6 +59,8 @@ func (m *Meter) Stop() error {
 	return nil
 }
 
+// Loop through interface ??
+
 func (m *Meter) loop() {
 
 	m.running = true
@@ -70,7 +72,7 @@ func (m *Meter) loop() {
 		// List all processes
 		// Loop through processes
 		// Filter process by path (as in config)
-		// Get several process metrics
+		// Get several process metrics (as in config)
 		// Store process metrics in the database
 	}
 
