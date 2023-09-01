@@ -15,7 +15,7 @@ type ConfigRequests struct {
 }
 
 type ConfigMetrics struct {
-	CollectInterval string         `json:"collect_interval" yaml:"collect_interval"`
+	CollectInterval int64          `json:"collect_interval" yaml:"collect_interval"`
 	Cpu             bool           `json:"cpu" yaml:"cpu"`
 	Mem             bool           `json:"mem" yaml:"mem"`
 	Disk            bool           `json:"disk" yaml:"disk"`

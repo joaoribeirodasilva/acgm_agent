@@ -39,6 +39,7 @@ metrics:
 settings:
   service: false
   ipv4only: false
+  debug: false
 
 nginx:
   sites_available: /etc/nginx/sites-available
