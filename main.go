@@ -8,7 +8,6 @@ import (
 	"biqx.com.br/acgm_agent/modules/database"
 	"biqx.com.br/acgm_agent/modules/logger"
 	"biqx.com.br/acgm_agent/modules/meters"
-	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -18,8 +17,6 @@ func main() {
 		panic("ERROR: " + err.Error())
 	}
 
-	// fmt.Printf("%+v, %s, %t\n", options, *options.ConfigFile, *options.Service)
-
 	config := &config.Config{}
 	err = config.Read(options)
 	if err != nil {
@@ -27,7 +24,7 @@ func main() {
 	}
 
 	logger.Init(config)
-	log.Info().Str("package", "Main").Err(err).Msg("Starting ACGM Agent")
+	logger.Log.Info().Msg("Starting ACGM Agent")
 
 	database := database.New(config)
 	err = database.Connect()
@@ -35,22 +32,15 @@ func main() {
 		return
 	}
 
-	cpus := meters.NewCPUs(config)
-	cpus.Init()
-	thread := meters.NewThread(cpus, config)
-	err = thread.Start()
-	if err != nil {
-		database.Disconnect()
-	}
+	cpus := meters.NewMetricsCPU(config)
+	partitions := meters.NewMetricsPartition(config)
+	threadCPUs := meters.NewThread(cpus, config)
+	threadPartitions := meters.NewThread(partitions, config)
+	threadCPUs.Start()
+	threadPartitions.Start()
 	time.Sleep(5000 * time.Millisecond)
-	thread.Stop()
-
-	// meters := meters.NewProcesses()
-	// meters.Start(config)
-
-	// time.Sleep(5000 * time.Millisecond)
-
-	// meters.Stop()
+	threadCPUs.Stop()
+	threadPartitions.Stop()
 	database.Disconnect()
-	log.Info().Str("package", "Main").Err(err).Msg("Terminating ACGM Agent")
+	logger.Log.Info().Msg("Terminating ACGM Agent")
 }

@@ -4,11 +4,14 @@
         "biqx",
         "cpus",
         "debian",
+        "Fstype",
         "github",
         "gorm",
+        "Mountpoint",
         "Msgf",
         "mysql",
         "ncpu",
+        "npartition",
         "zerolog"
     ]
 }

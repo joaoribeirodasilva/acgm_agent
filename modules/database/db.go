@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"biqx.com.br/acgm_agent/modules/config"
-	"github.com/rs/zerolog/log"
+	"biqx.com.br/acgm_agent/modules/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -38,7 +38,7 @@ func New(conf *config.Config) *Db {
 		)
 	}
 
-	log.Info().Str("package", "Database").Msgf("Database at: %s:%d/%s", conf.Database.Host, conf.Database.Port, conf.Database.Database)
+	logger.Log.Info().Msgf("Database at: %s:%d/%s", conf.Database.Host, conf.Database.Port, conf.Database.Database)
 
 	return &Db{
 		dsn:  dsn,
@@ -54,24 +54,24 @@ func (d *Db) Connect() error {
 
 	d.Db, err = gorm.Open(mysql.Open(d.dsn), &gorm.Config{})
 	if err != nil {
-		log.Error().Str("package", "Database").Err(err).Msg("Failed to open database connection")
+		logger.Log.Error().Err(err).Msg("Failed to open database connection")
 		return err
 	}
 
 	d.Conn, err = d.Db.DB()
 	if err != nil {
-		log.Error().Str("package", "Database").Err(err).Msg("Failed to get database handler")
+		logger.Log.Error().Err(err).Msg("Failed to get database handler")
 		return err
 	}
 
 	err = d.Conn.Ping()
 	if err != nil {
-		log.Error().Str("package", "Database").Err(err).Msg("Failed to ping the database")
+		logger.Log.Error().Err(err).Msg("Failed to ping the database")
 		return err
 	}
 
 	d.connected = true
-	log.Info().Str("package", "Database").Err(err).Msg("Connected to the database")
+	logger.Log.Info().Msg("Connected to the database")
 
 	d.Tx, err = d.Begin()
 	if err != nil {
@@ -89,7 +89,7 @@ func (d *Db) Begin() (*gorm.DB, error) {
 
 	tx := d.Db.Begin()
 	if d.Db.Error != nil {
-		log.Error().Str("package", "Database").Err(d.Db.Error).Msg("Failed to start database transaction")
+		logger.Log.Error().Err(d.Db.Error).Msg("Failed to start database transaction")
 		return nil, d.Db.Error
 	}
 
@@ -107,7 +107,7 @@ func (d *Db) Commit(tx *gorm.DB) error {
 
 	err = d.Tx.Error
 	if err != nil {
-		log.Error().Str("package", "Database").Err(err).Msg("Failed to commit database transaction")
+		logger.Log.Error().Err(err).Msg("Failed to commit database transaction")
 		return err
 	}
 
@@ -125,7 +125,7 @@ func (d *Db) Rollback(tx *gorm.DB) error {
 
 	err = d.Tx.Error
 	if err != nil {
-		log.Error().Str("package", "Database").Err(err).Msg("Failed to rollback database transaction")
+		logger.Log.Error().Err(err).Msg("Failed to rollback database transaction")
 		return err
 	}
 
@@ -136,12 +136,13 @@ func (d *Db) Disconnect() error {
 
 	db, err := d.Db.DB()
 	if err != nil {
+		logger.Log.Error().Err(err).Msg("unable to fetch database handler")
 		return err
 	}
 	db.Close()
 	d.connected = false
 
-	log.Info().Str("package", "Database").Msg("Disconnected from the database")
+	logger.Log.Info().Msg("Disconnected from the database")
 
 	return nil
 }

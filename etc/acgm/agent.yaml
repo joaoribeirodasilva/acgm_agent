@@ -13,10 +13,14 @@ database:
 
 # ACGM logs
 logs:
-  retention: 3d
+  console: true
+  file: true
+  json: true
+  backups: 10
   dir: /var/log/acgm
-  file: agent.log
-  max_size: 1M
+  name: agent.log
+  max_size: 1
+  max_days: 1
 
 # Metrics
 metrics:
@@ -39,7 +43,7 @@ metrics:
 settings:
   service: false
   ipv4only: false
-  debug: false
+  debug: true
 
 nginx:
   sites_available: /etc/nginx/sites-available

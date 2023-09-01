@@ -4,12 +4,14 @@ import (
 	"time"
 
 	"biqx.com.br/acgm_agent/modules/config"
-	"github.com/rs/zerolog/log"
+	"biqx.com.br/acgm_agent/modules/logger"
 )
 
 type MeterInterface interface {
+	Init() error
+	IsInitFailed() bool
 	GetThreadName() string
-	Collect()
+	Collect() error
 }
 
 type Thread struct {
@@ -28,7 +30,7 @@ func NewThread(ti MeterInterface, conf *config.Config) *Thread {
 
 func (t *Thread) Start() error {
 	t.request_stop = false
-	log.Info().Str("namespace", "meters::thread::Start").Msgf("Starting thread %s", t.meter.GetThreadName())
+	logger.Log.Info().Msgf("Starting thread %s", t.meter.GetThreadName())
 	go t.run()
 	return nil
 }
@@ -36,11 +38,16 @@ func (t *Thread) Start() error {
 func (t *Thread) run() {
 
 	t.is_running = true
-	log.Info().Str("namespace", "meters::thread::run").Msgf("Thread %s started", t.meter.GetThreadName())
+	t.meter.Init()
+	if t.meter.IsInitFailed() {
+		logger.Log.Error().Msgf("Thread %s initialization failed... aborting thread", t.meter.GetThreadName())
+		return
+	}
+	logger.Log.Info().Msgf("Thread %s started", t.meter.GetThreadName())
 	for {
 		time.Sleep(time.Duration(t.config.Metrics.CollectInterval) * time.Millisecond)
 		if t.request_stop {
-			log.Info().Str("namespace", "meters::thread::run").Msgf("Stop thread %s requested", t.meter.GetThreadName())
+			logger.Log.Info().Msgf("Stop thread %s requested", t.meter.GetThreadName())
 			break
 		}
 		t.meter.Collect()
@@ -53,7 +60,7 @@ func (t *Thread) Stop() error {
 	for t.is_running {
 		time.Sleep(time.Duration(t.config.Metrics.CollectInterval/2) * time.Millisecond)
 	}
-	log.Info().Str("namespace", "meters::thread::Stop").Msgf("Thread %s stopped", t.meter.GetThreadName())
+	logger.Log.Info().Msgf("Thread %s stopped", t.meter.GetThreadName())
 	return nil
 }
 
