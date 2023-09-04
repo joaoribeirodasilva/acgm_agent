@@ -34,13 +34,28 @@ func main() {
 
 	cpus := meters.NewMetricsCPU(config)
 	partitions := meters.NewMetricsPartition(config)
+	memory := meters.NewMetricsMemory(config)
+	net := meters.NewMetricsNet(config)
+	load := meters.NewMetricsLoad(config)
 	threadCPUs := meters.NewThread(cpus, config)
 	threadPartitions := meters.NewThread(partitions, config)
+	threadMemory := meters.NewThread(memory, config)
+	threadNet := meters.NewThread(net, config)
+	threadLoad := meters.NewThread(load, config)
+
 	threadCPUs.Start()
 	threadPartitions.Start()
+	threadMemory.Start()
+	threadNet.Start()
+	threadLoad.Start()
+
 	time.Sleep(5000 * time.Millisecond)
+
 	threadCPUs.Stop()
 	threadPartitions.Stop()
+	threadMemory.Stop()
+	threadNet.Stop()
+	threadLoad.Stop()
 	database.Disconnect()
 	logger.Log.Info().Msg("Terminating ACGM Agent")
 }

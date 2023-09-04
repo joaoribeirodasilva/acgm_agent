@@ -7,6 +7,7 @@ require (
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/jonhoo/go-events v0.0.0-20150121182257-5b240ffae643 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/rs/zerolog v1.30.0 // indirect

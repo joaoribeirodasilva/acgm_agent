@@ -145,10 +145,12 @@ func (nm *MetricsCPU) Cut() (*[]CPUs, error) {
 		logger.Log.Debug().Msg("waiting for collect to finish")
 		time.Sleep(50 * time.Millisecond)
 	}
+
 	logger.Log.Debug().Msg("cutting data")
 	metrics := nm.Metrics
 	nm.Metrics = []CPUs{}
 	logger.Log.Debug().Msgf("finish data cut with %d metrics", len(metrics))
+
 	if nm.config.Settings.Debug {
 		end = time.Now().UnixNano() / int64(time.Millisecond)
 		diff = end - start
@@ -230,6 +232,7 @@ func (nm *MetricsCPU) GetCpusTimes(c *CPUs) error {
 	times, err := cpu.Times(true)
 	if err != nil {
 		logger.Log.Error().Err(err).Msg("failed to get host CPUs times")
+		return err
 	}
 
 	for idx, item := range times {

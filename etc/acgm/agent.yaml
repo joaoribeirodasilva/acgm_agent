@@ -24,12 +24,32 @@ logs:
 
 # Metrics
 metrics:
-  collect_interval: 1000
-  cpu: true
-  mem: true
-  disk: true
-  net: true
-  requests:
+  cpu:
+    collect_interval: 1000
+    aggregate: 60
+  memory:
+    collect_interval: 1000
+    aggregate: 60
+  disk:
+    collect_interval: 1000
+    aggregate: 60
+  network: 
+    collect_interval: 1000
+    aggregate: 60
+  load:
+    collect_interval: 1000
+    aggregate: 60
+  partitions:
+    collect_interval: 1000
+    aggregate: 60
+  processes:
+    collect_interval: 1000
+    aggregate: 60
+    process_names:
+      - all
+  http:
+    collect_interval: 1000
+    aggregate: 60
     access: true
     errors: true
     duration: true

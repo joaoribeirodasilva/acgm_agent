@@ -1,20 +1,21 @@
 package meters
 
 import (
+	"fmt"
 	"time"
 
 	"biqx.com.br/acgm_agent/modules/config"
-	"github.com/rs/zerolog/log"
+	"biqx.com.br/acgm_agent/modules/logger"
 	"github.com/shirou/gopsutil/mem"
 )
 
 var MEMORY_THREAD_NAME = "memory"
 
 type Memory struct {
-	VirtualMemory   mem.VirtualMemoryStat   `json:"memory" yaml:"memory"`
-	VirtualMemoryEx mem.VirtualMemoryExStat `json:"memory_ex" yaml:"memory_ex"`
-	SwapDevices     []mem.SwapDevice        `json:"swap_devices" yaml:"swap_devices"`
-	SwapMemory      mem.SwapMemoryStat      `json:"swap_memory" yaml:"swap_memory"`
+	DateTime      time.Time             `json:"date_time" yaml:"date_time"`
+	VirtualMemory mem.VirtualMemoryStat `json:"memory" yaml:"memory"`
+	SwapDevices   []mem.SwapDevice      `json:"swap_devices" yaml:"swap_devices"`
+	SwapMemory    mem.SwapMemoryStat    `json:"swap_memory" yaml:"swap_memory"`
 }
 
 type MetricsMemory struct {
@@ -23,6 +24,16 @@ type MetricsMemory struct {
 	init_failed bool           `json:"-" yaml:"-"`
 	collecting  bool           `json:"-" yaml:"-"`
 	cutting     bool           `json:"-" yaml:"-"`
+}
+
+func NewMetricsMemory(conf *config.Config) *MetricsMemory {
+	nm := &MetricsMemory{
+		config:      conf,
+		init_failed: false,
+		collecting:  false,
+		cutting:     false,
+	}
+	return nm
 }
 
 func (nm *MetricsMemory) Init() error {
@@ -37,63 +48,149 @@ func (nm *MetricsMemory) Init() error {
 	return nil
 }
 
-func (m *Memory) IsInitFailed() bool {
-	return m.init_failed
+func (nm *MetricsMemory) IsInitFailed() bool {
+	return nm.init_failed
 }
 
-func (m *Memory) GetThreadName() string {
+func (nm *MetricsMemory) GetThreadName() string {
 	return MEMORY_THREAD_NAME
 }
 
-func (m *Memory) Collect() {
+func (nm *MetricsMemory) Collect() error {
 	var start, end, diff int64
-	if m.init_failed {
-		return
+	if nm.init_failed {
+		err := nm.error_init()
+		logger.Log.Error().Err(err)
+		return err
 	}
-	if m.config.Settings.Debug {
+	if nm.config.Settings.Debug {
 		start = time.Now().UnixNano() / int64(time.Millisecond)
 	}
-	m.collecting = true
-	for m.cutting {
-		log.Debug().Str("namespace", "meters::partitions::Collect").Msg("Waiting for cut to finish")
+	nm.collecting = true
+	for nm.cutting {
+		logger.Log.Debug().Msg("waiting for cut to finish")
 		time.Sleep(50 * time.Millisecond)
 	}
-	log.Debug().Str("namespace", "meters::partitions::Collect").Msg("Collecting data")
+	logger.Log.Debug().Msg("collecting data")
 
-	// TODO: Code
+	metrics := Memory{}
+	metrics.DateTime = time.Now()
 
-	log.Debug().Str("namespace", "meters::partitions::Collect").Msg("Finish data collection for memory")
-	if m.config.Settings.Debug {
+	if err := nm.GetVirtualMemory(&metrics); err != nil {
+		return err
+	}
+
+	if err := nm.GetSwapDevices(&metrics); err != nil {
+		return err
+	}
+
+	if err := nm.GetSwapMemory(&metrics); err != nil {
+		return err
+	}
+
+	nm.Metrics = append(nm.Metrics, metrics)
+
+	logger.Log.Debug().Msg("finish data collection for memory")
+	if nm.config.Settings.Debug {
 		end = time.Now().UnixNano() / int64(time.Millisecond)
 		diff = end - start
-		log.Debug().Str("namespace", "meters::partitions::Collect").Msgf("Collect took %d ms", diff)
+		logger.Log.Debug().Msgf("collect took %d ms", diff)
 	}
-	m.collecting = false
+	nm.collecting = false
+	return nil
 }
 
-func (m *Memory) Cut() *[]Memory {
+func (nm *MetricsMemory) Cut() (*[]Memory, error) {
+
 	var start, end, diff int64
-	if m.init_failed {
-		return nil
+	if nm.init_failed {
+		return nil, nil
 	}
-	if m.config.Settings.Debug {
+	if nm.config.Settings.Debug {
 		start = time.Now().UnixNano() / int64(time.Millisecond)
 	}
-	m.cutting = true
-	for m.collecting {
-		log.Debug().Str("namespace", "meters::partitions::Cut").Msg("Waiting for collect to finish")
+	nm.cutting = true
+	for nm.collecting {
+		logger.Log.Debug().Msg("Waiting for collect to finish")
 		time.Sleep(50 * time.Millisecond)
 	}
-	log.Debug().Str("namespace", "meters::partitions::Cut").Msg("Cutting data")
+	logger.Log.Debug().Msg("Cutting data")
 
-	// TODO: Code here
-	nmemory := []Memory{}
-	log.Debug().Str("namespace", "meters::partitions::Cut").Msgf("Finish data cut with %d partitions", len(nmemory))
-	if m.config.Settings.Debug {
+	metrics := nm.Metrics
+	nm.Metrics = []Memory{}
+	logger.Log.Debug().Msgf("finish data cut with %d metrics", len(metrics))
+
+	if nm.config.Settings.Debug {
 		end = time.Now().UnixNano() / int64(time.Millisecond)
 		diff = end - start
-		log.Debug().Str("namespace", "meters::partitions::Cut").Msgf("Cut took %d ms", diff)
+		logger.Log.Debug().Msgf("Cut took %d ms", diff)
 	}
-	m.cutting = false
-	return &nmemory
+	nm.cutting = false
+
+	return &metrics, nil
+}
+
+func (nm *MetricsMemory) GetVirtualMemory(m *Memory) error {
+
+	if nm.init_failed {
+		err := nm.error_init()
+		logger.Log.Error().Err(err)
+		return err
+	}
+
+	virtual_memory, err := mem.VirtualMemory()
+	if err != nil || virtual_memory == nil {
+		logger.Log.Error().Err(err).Msg("failed to get host virtual memory data")
+		return err
+	}
+
+	m.VirtualMemory = *virtual_memory
+
+	return nil
+}
+
+func (nm *MetricsMemory) GetSwapDevices(m *Memory) error {
+
+	if nm.init_failed {
+		err := nm.error_init()
+		logger.Log.Error().Err(err)
+		return err
+	}
+
+	swap_devices, err := mem.SwapDevices()
+	if err != nil || swap_devices == nil {
+		logger.Log.Error().Err(err).Msg("failed to get host swap devices")
+		return err
+	}
+
+	for _, swap_device := range swap_devices {
+		m.SwapDevices = append(m.SwapDevices, *swap_device)
+	}
+
+	return nil
+}
+
+func (nm *MetricsMemory) GetSwapMemory(m *Memory) error {
+
+	if nm.init_failed {
+		err := nm.error_init()
+		logger.Log.Error().Err(err)
+		return err
+	}
+
+	swap_memory, err := mem.SwapMemory()
+	if err != nil || swap_memory == nil {
+		logger.Log.Error().Err(err).Msg("failed to get host swap memory data")
+		return err
+	}
+
+	m.SwapMemory = *swap_memory
+
+	return nil
+}
+
+func (nm *MetricsMemory) error_init() error {
+	str_err := "initialization failed, init must be run again"
+	err := fmt.Errorf(str_err)
+	return err
 }
