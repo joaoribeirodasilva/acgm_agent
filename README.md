@@ -1,3 +1,5 @@
 # Application Cluster Gateway Agent (ACGM Agent)
 
-The ACGM Agent is an agent software that is placed alongside the NGINX server in order to perform administrative tasks and metrics collection.
+The ACGM Agent is an agent software that is placed alongside the docker containers and hosts (physical or virtual).
+
+**NOTE:** This code is in active development and it's not in a usable state yet!
