@@ -34,63 +34,38 @@ var HOST_THREAD_NAME = "host"
 // 	fmt.Println("exiting")
 // }
 
+type Signal string
+
+const (
+	SIGNAL_HOST_STARTING    Signal = "meter.host.starting"
+	SIGNAL_HOST_STARTED     Signal = "meter.host.started"
+	SIGNAL_HOST_INITIALIZED Signal = "meter.host.initialized"
+	SIGNAL_HOST_STOPPING    Signal = "meter.host.stopping"
+	SIGNAL_HOST_STOPPED     Signal = "meter.host.stopped"
+)
+
 type Host struct {
-	Name        string         `json:"name" yaml:"name"`
-	CPUs        *CPUs          `json:"cpus" yaml:"cpus"`
-	Memory      *Memory        `json:"memory" yaml:"memory"`
-	Load        *Load          `json:"load" yaml:"load"`
-	Net         *Net           `json:"network" yaml:"network"`
-	Partitions  *Partitions    `json:"disk" yaml:"disk"`
-	Processes   *Processes     `json:"processes" yaml:"processes"`
-	config      *config.Config `json:"-" yaml:"-"`
-	init_failed bool           `json:"-" yaml:"-"`
-	collecting  bool           `json:"-" yaml:"-"`
-	cutting     bool           `json:"-" yaml:"-"`
-	events      HostEvents     `json:"-" yaml:"-"`
+	Name            string          `json:"name" yaml:"name"`
+	CPUs            *CPUs           `json:"cpus" yaml:"cpus"`
+	Memory          *Memory         `json:"memory" yaml:"memory"`
+	Load            *Load           `json:"load" yaml:"load"`
+	Net             *Net            `json:"network" yaml:"network"`
+	Partitions      *Partitions     `json:"disk" yaml:"disk"`
+	Processes       *Processes      `json:"processes" yaml:"processes"`
+	config          *config.Config  `json:"-" yaml:"-"`
+	init_failed     bool            `json:"-" yaml:"-"`
+	collecting      bool            `json:"-" yaml:"-"`
+	cutting         bool            `json:"-" yaml:"-"`
+	received_events map[string]bool `json:"-" yaml:"-"`
 }
 
 type HostEvents struct {
-	Listen []string
-	Signal map[string]goevents.Event
+	Received map[string]bool
 }
 
 func (h *Host) Init() error {
 	// Transfer events to each class signal
-	listens := []string{
-		"meter.cpus.collected",
-		"meter.cpus.aggregated",
-		"meter.cpus.inserted",
-		"meter.cpus.initialized",
-		"meter.memory.collected",
-		"meter.memory.aggregated",
-		"meter.memory.inserted",
-		"meter.load.collected",
-		"meter.load.aggregated",
-		"meter.load.inserted",
-		"meter.network.collected",
-		"meter.network.aggregated",
-		"meter.network.inserted",
-		"meter.disk.collected",
-		"meter.disk.aggregated",
-		"meter.disk.inserted",
-		"meter.processes.collected",
-		"meter.processes.aggregated",
-		"meter.processes.inserted",
-	}
-
-	signals := []string{
-		"meter.host.start",
-		"meter.host.stop",
-		"meter.host.initialized",
-	}
-
-	h.events.Signal = make(map[string]goevents.Event)
-	for _, signal := range signals {
-		h.events.Signal = map[string]goevents.Event{
-			signal: goevents.New(signal),
-		}
-	}
-
+	go h.ListenMetrics()
 	return nil
 }
 
@@ -99,12 +74,6 @@ func (h *Host) Start() error {
 }
 
 func (h *Host) Stop() error {
-	return nil
-}
-
-func (h *Host) Init() error {
-
-	h.init_failed = false
 	return nil
 }
 
@@ -117,5 +86,30 @@ func (h *Host) GetThreadName() string {
 }
 
 func (h *Host) Collect() error {
+	return nil
+}
+
+func (h *Host) ListenMetrics() error {
+	// Loop until meter.cpu.stopped
+	// The events must be statis
+	chns := goevents.Listen("metrics.")
+	for event := range chns {
+		switch event.Tag {
+		case "meter.cpu":
+			break
+		case "meter.memory":
+			break
+		case "meter.load":
+			break
+		case "meter.network":
+			break
+		case "meter.disk":
+			break
+		case "meter.processes":
+			break
+		case "meter.nginx":
+			break
+		}
+	}
 	return nil
 }
