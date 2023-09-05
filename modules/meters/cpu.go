@@ -56,6 +56,8 @@ func (nm *CPUMeter) Start() {
 
 	nm.FireEvent(STATUS_STARTING)
 
+	nm.FireEvent(STATUS_STARTED)
+
 }
 
 func (nm *CPUMeter) Stop() {
