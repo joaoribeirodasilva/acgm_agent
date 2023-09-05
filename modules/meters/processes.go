@@ -25,7 +25,7 @@ func NewProcesses() *Processes {
 
 func (m *Processes) Start(conf *config.Config) error {
 
-	m.Interval = time.Duration(conf.Metrics.Processes.CollectInterval) * time.Millisecond
+	m.Interval = time.Duration(conf.Metrics.Processes.Interval) * time.Millisecond
 	m.stop_requested = false
 
 	go m.loop()

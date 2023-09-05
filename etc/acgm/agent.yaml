@@ -25,24 +25,31 @@ logs:
 # Metrics
 metrics:
   cpu:
+    active: true
     collect_interval: 1000
     aggregate: 60
   memory:
+    active: true
     collect_interval: 1000
     aggregate: 60
   disk:
+    active: true
     collect_interval: 1000
     aggregate: 60
   network: 
+    active: true
     collect_interval: 1000
     aggregate: 60
   load:
+    active: true
     collect_interval: 1000
     aggregate: 60
   partitions:
+    active: true
     collect_interval: 1000
     aggregate: 60
   processes:
+    active: true
     collect_interval: 1000
     aggregate: 60
     process_names:

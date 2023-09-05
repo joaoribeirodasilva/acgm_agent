@@ -1,115 +1,219 @@
 package meters
 
 import (
+	"time"
+
 	"biqx.com.br/acgm_agent/modules/config"
-	goevents "github.com/jonhoo/go-events"
+	"biqx.com.br/acgm_agent/modules/database"
+	evnt "github.com/jonhoo/go-events"
+	"github.com/shirou/gopsutil/host"
 )
 
-var HOST_THREAD_NAME = "host"
+var METRIC_HOST_NAME = "host"
 
-// Event based metrics
-// package main
-
-// import (
-// 	"fmt"
-
-// 	goevents
-// )
-
-// func main() {
-
-// 	chn := event.Listen("example.hello")
-// 	fmt.Println("listening for event")
-
-// 	go func() {
-// 		fmt.Println("firing event")
-// 		event.Signal("example.hello")
-// 		fmt.Println("event fired")
-// 	}()
-
-// 	fmt.Println("waiting for channel")
-// 	e := <-chn
-
-// 	fmt.Println(e.Tag)
-// 	fmt.Println("exiting")
-// }
-
-type Signal string
-
-const (
-	SIGNAL_HOST_STARTING    Signal = "meter.host.starting"
-	SIGNAL_HOST_STARTED     Signal = "meter.host.started"
-	SIGNAL_HOST_INITIALIZED Signal = "meter.host.initialized"
-	SIGNAL_HOST_STOPPING    Signal = "meter.host.stopping"
-	SIGNAL_HOST_STOPPED     Signal = "meter.host.stopped"
-)
-
-type Host struct {
-	Name            string          `json:"name" yaml:"name"`
-	CPUs            *CPUs           `json:"cpus" yaml:"cpus"`
-	Memory          *Memory         `json:"memory" yaml:"memory"`
-	Load            *Load           `json:"load" yaml:"load"`
-	Net             *Net            `json:"network" yaml:"network"`
-	Partitions      *Partitions     `json:"disk" yaml:"disk"`
-	Processes       *Processes      `json:"processes" yaml:"processes"`
-	config          *config.Config  `json:"-" yaml:"-"`
-	init_failed     bool            `json:"-" yaml:"-"`
-	collecting      bool            `json:"-" yaml:"-"`
-	cutting         bool            `json:"-" yaml:"-"`
-	received_events map[string]bool `json:"-" yaml:"-"`
+type HostMetric struct {
+	MetricTimes
+	Host         host.InfoStat          `json:"host" yaml:"host"`
+	LSB          host.LSB               `json:"lsb" yaml:"lsb"`
+	Temperatures []host.TemperatureStat `json:"temperatures" yaml:"temperatures"`
+	Users        []host.UserStat        `json:"users" yaml:"users"`
 }
 
-type HostEvents struct {
-	Received map[string]bool
+type HostMeter struct {
+	MeterControl
+	HostID  string       `json:"host_id" yaml:"host_id"`
+	Metrics []HostMetric `json:"metrics" yaml:"metrics"`
 }
 
-func (h *Host) Init() error {
-	// Transfer events to each class signal
-	go h.ListenMetrics()
-	return nil
+func NewHostMeter(conf *config.Config, db *database.Db) *HostMeter {
+	nm := &HostMeter{}
+	nm.name = METRIC_HOST_NAME
+	nm.conf = conf
+	nm.status = STATUS_STOPPED
+	nm.db = db
+	go nm.EventHandler()
+	return nm
 }
 
-func (h *Host) Start() error {
-	return nil
+func (nm *HostMeter) GetHostID() (string, error) {
+
+	host_id, err := host.HostID()
+	nm.HostID = host_id
+
+	return host_id, err
 }
 
-func (h *Host) Stop() error {
-	return nil
+func (nm *HostMeter) Start() {
+
+	nm.FireEvent(STATUS_STARTING)
+
 }
 
-func (h *Host) IsInitFailed() bool {
-	return h.init_failed
+func (nm *HostMeter) Stop() {
+
+	for nm.status == STATUS_COLLECTING || nm.status == STATUS_AGGREGATING {
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	nm.FireEvent(STATUS_STOPPING)
+	nm.Aggregate()
+
+	for nm.status == STATUS_STOPPING || nm.status == STATUS_AGGREGATING {
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	nm.FireEvent(STATUS_STOPPED)
+
 }
 
-func (h *Host) GetThreadName() string {
-	return HOST_THREAD_NAME
+func (nm *HostMeter) GetStatus() MeterStatus {
+	return nm.status
 }
 
-func (h *Host) Collect() error {
-	return nil
+func (nm *HostMeter) FireEvent(status MeterStatus) {
+
+	nm.status = status
+	evnt.Signal("meter.changed.host")
 }
 
-func (h *Host) ListenMetrics() error {
-	// Loop until meter.cpu.stopped
-	// The events must be statis
-	chns := goevents.Listen("metrics.")
-	for event := range chns {
+func (nm *HostMeter) EventHandler() {
+
+	evnt.Verbosity = 0
+	if nm.conf.Settings.Debug {
+		evnt.Verbosity = 3
+	}
+
+	events := evnt.Listen("meter.meter.")
+
+	for event := range events {
 		switch event.Tag {
-		case "meter.cpu":
-			break
-		case "meter.memory":
-			break
-		case "meter.load":
-			break
-		case "meter.network":
-			break
-		case "meter.disk":
-			break
-		case "meter.processes":
-			break
-		case "meter.nginx":
+		case "meter.meter.start":
+			nm.Start()
+		case "meter.meter.collect":
+			nm.Collect()
+		case "meter.meter.stop":
+			nm.Stop()
+		}
+		if nm.status == STATUS_STOPPED {
 			break
 		}
 	}
-	return nil
+}
+
+func (nm *HostMeter) GetName() string {
+	return METRIC_HOST_NAME
+}
+
+func (nm *HostMeter) Collect() {
+
+	if nm.status != STATUS_WAITING {
+		return
+	}
+	nm.FireEvent(STATUS_COLLECTING)
+	metric := HostMetric{}
+
+	metric.DateTime = time.Now()
+
+	// // CPU load average
+	// average, err := load.Avg()
+	// if err != nil || average == nil {
+	// 	logger.Log.Error().Err(err).Msg("failed to get CPU load average data")
+	// } else {
+	// 	metric.Total.Average = *average
+	// }
+
+	// // CPU miscellaneous data
+	// misc, err := load.Misc()
+	// if err != nil || misc == nil {
+	// 	logger.Log.Error().Err(err).Msg("failed to get CPU load miscellaneous data")
+	// } else {
+	// 	metric.Total.Misc = *misc
+	// }
+
+	// // Physical CPU (Cores)
+	// physical, err := cpu.Counts(false)
+	// if err != nil {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host physical CPU count")
+	// }
+	// metric.Total.Physical = physical
+
+	// // Logical CPU (Threads)
+	// logical, err := cpu.Counts(true)
+	// if err != nil {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host logical CPU count")
+	// }
+	// metric.Total.Logical = logical
+
+	// // Total CPU times
+	// total_times, err := cpu.Times(false)
+	// if err != nil || len(total_times) == 0 {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host CPU total times")
+	// } else {
+	// 	metric.Total.Times = total_times[0]
+	// }
+
+	// // Total CPU percentage usage
+	// percent, err := cpu.Percent(0, false)
+	// if err != nil || len(percent) == 0 {
+	// 	logger.Log.Error().Err(err).Msg("Failed to get host CPU percent total")
+	// } else {
+	// 	metric.Total.Percent = percent[0]
+	// }
+
+	// // CPU threads information
+	// info, err := cpu.Info()
+	// if err != nil || len(info) == 0 {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host CPU and CPU cores information")
+	// 	nm.Metrics = append(nm.Metrics, metric)
+	// 	return
+	// } else {
+	// 	metric.Total.Info = info[0]
+	// 	for _, cpu := range info {
+	// 		core := CPUCore{
+	// 			Info: cpu,
+	// 		}
+	// 		metric.Cores = append(metric.Cores, core)
+	// 	}
+	// }
+
+	// // CPU threads times
+	// core_times, err := cpu.Times(true)
+	// if err != nil {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host CPU cores times")
+	// } else {
+	// 	for idx, times := range core_times {
+	// 		metric.Cores[idx].Times = times
+	// 	}
+	// }
+
+	// // CPU threads percentage usage
+	// percents, err := cpu.Percent(0, true)
+	// if err != nil || len(info) == 0 {
+	// 	logger.Log.Error().Err(err).Msg("failed to get host CPU cores percent")
+	// } else {
+	// 	for idx, percent := range percents {
+	// 		metric.Cores[idx].Percent = percent
+	// 	}
+	// }
+
+	nm.AppendMetric(&metric)
+}
+
+func (nm *HostMeter) AppendMetric(metric *HostMetric) {
+	metric.Duration = (time.Now().UnixNano() / int64(time.Millisecond)) - (metric.DateTime.UnixNano() / int64(time.Millisecond))
+	nm.Metrics = append(nm.Metrics, *metric)
+	nm.Aggregate()
+}
+
+func (nm *HostMeter) Aggregate() {
+
+	if len(nm.Metrics) == 0 || (len(nm.Metrics) < nm.conf.Metrics.Cpu.Aggregate && nm.status != STATUS_STOPPING) {
+		nm.FireEvent(STATUS_WAITING)
+		return
+	}
+
+	nm.FireEvent(STATUS_AGGREGATING)
+
+	nm.FireEvent(STATUS_WAITING)
 }

@@ -59,6 +59,7 @@ func (c *Config) Read(options *cmd.CmdOptions) error {
 			c.path = pathEtc
 		}
 	}
+
 	var fileBytes []byte
 
 	fileBytes, err = os.ReadFile(c.path)
