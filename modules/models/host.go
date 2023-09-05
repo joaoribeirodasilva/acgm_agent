@@ -7,9 +7,6 @@ type HostInfo struct {
 	Hostname             string    `json:"hostname" gorm:"column:hostname;type:string;size:255"`
 	Uptime               time.Time `json:"uptime" gorm:"column:uptime;type:timestamp;"`
 	BootTime             time.Time `json:"boot_time" gorm:"column:boot_time;type:timestamp;"`
-	ProcessesAvg         uint64    `json:"processes_avg" gorm:"column:processes_avg;type:uint;size:10"`
-	ProcessesMax         uint64    `json:"processes_max" gorm:"column:processes_max;type:uint;size:10"`
-	ProcessesMin         uint64    `json:"processes_min" gorm:"column:processes_min;type:uint;size:10"`          // number of processes
 	OS                   string    `json:"os" gorm:"column:os;type:string;size:255"`                             // ex: freebsd, linux
 	Platform             string    `json:"platform" gorm:"column:platform;type:string;size:255"`                 // ex: ubuntu, linuxmint
 	PlatformFamily       string    `json:"platform_family" gorm:"column:platform_family;type:string;size:255"`   // ex: debian, rhel
@@ -33,7 +30,7 @@ type HostTemperatures struct {
 	SensorKey       string    `json:"sensor_key" gorm:"column:sensor_key;type:string;size:255"`
 	TemperatureAvg  float64   `json:"temperature_avg" gorm:"column:temperature_avg;type:float"`
 	TemperatureMax  float64   `json:"temperature_max" gorm:"column:temperature_max;type:float"`
-	TemperatureMix  float64   `json:"temperature_min" gorm:"column:temperature_min;type:float"`
+	TemperatureMin  float64   `json:"temperature_min" gorm:"column:temperature_min;type:float"`
 	CollectedAt     time.Time `json:"collected_at" gorm:"column:collected_at;type:timestamp;"`
 	CollectedMillis uint64    `json:"collected_milliseconds" gorm:"column:collected_milliseconds;type:int;size:20;"`
 }

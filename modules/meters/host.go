@@ -1,11 +1,13 @@
 package meters
 
 import (
+	"fmt"
 	"time"
 
 	"biqx.com.br/acgm_agent/modules/config"
 	"biqx.com.br/acgm_agent/modules/database"
 	"biqx.com.br/acgm_agent/modules/logger"
+	"biqx.com.br/acgm_agent/modules/models"
 	evnt "github.com/jonhoo/go-events"
 	"github.com/shirou/gopsutil/host"
 )
@@ -15,23 +17,8 @@ var METRIC_HOST_NAME = "host"
 type HostMetric struct {
 	MetricTimes
 	Host         host.InfoStat          `json:"host" yaml:"host"`
-	LSB          host.LSB               `json:"lsb" yaml:"lsb"`
 	Temperatures []host.TemperatureStat `json:"temperatures" yaml:"temperatures"`
 	Users        []host.UserStat        `json:"users" yaml:"users"`
-}
-
-type HostTemperaturesAggregate struct {
-	SensorKey          string
-	AverageTemperature float64
-	MaxTemperature     float64
-	MinTemperature     float64
-}
-
-type HostUsersAggregate struct {
-	User     string
-	Terminal string
-	Host     string
-	Started  string
 }
 
 type HostMeter struct {
@@ -141,9 +128,102 @@ func (nm *HostMeter) Aggregate() {
 
 	nm.FireEvent(STATUS_AGGREGATING)
 
-	for _, metric := range nm.Metrics {
+	model_info := models.HostInfo{}
+	temps := make(map[string]MeterMinMaxAvgFloat64)
+	users := make(map[string]models.HostUsers)
 
+	for idx, metric := range nm.Metrics {
+		if idx == 0 {
+			model_info.HostID = metric.Host.HostID
+			model_info.Hostname = metric.Host.Hostname
+			uptime := time.Unix(int64(metric.Host.Uptime), 0)
+			model_info.Uptime = uptime
+			boot_time := time.Unix(int64(metric.Host.BootTime), 0)
+			model_info.BootTime = boot_time
+			model_info.OS = metric.Host.OS
+			model_info.Platform = metric.Host.Platform
+			model_info.PlatformFamily = metric.Host.PlatformFamily
+			model_info.PlatformVersion = metric.Host.PlatformVersion
+			model_info.KernelVersion = metric.Host.KernelVersion
+			model_info.KernelArch = metric.Host.KernelArch
+			model_info.VirtualizationSystem = metric.Host.VirtualizationSystem
+			model_info.VirtualizationRole = metric.Host.VirtualizationRole
+			model_info.CollectedAt = metric.DateTime
+			model_info.CollectedMillis = uint64(metric.Duration)
+		}
+		for _, temp := range nm.Metrics[idx].Temperatures {
+			key := temp.SensorKey
+			val, ok := temps[key]
+			if !ok {
+				temps[key] = MeterMinMaxAvgFloat64{
+					Count: 0,
+					Max:   temp.Temperature,
+					Min:   temp.Temperature,
+					Total: temp.Temperature,
+					Avg:   0,
+				}
+
+			}
+			if val.Max < temp.Temperature {
+				val.Max = temp.Temperature
+			}
+			if val.Min > temp.Temperature {
+				val.Min = temp.Temperature
+			}
+			if val.Total > temp.Temperature {
+				val.Total += temp.Temperature
+			}
+			val.Count++
+		}
+		for _, usr := range nm.Metrics[idx].Users {
+			key := fmt.Sprintf("%s_%s_%s", usr.User, usr.Host, usr.Terminal)
+			_, ok := users[key]
+			if !ok {
+				started := time.Unix(int64(usr.Started), 0)
+				users[key] = models.HostUsers{
+					User:     usr.User,
+					Terminal: usr.Terminal,
+					Host:     usr.Host,
+					Started:  started,
+				}
+			}
+		}
 	}
+
+	tx, err := nm.db.Begin()
+	if err != nil {
+		logger.Log.Error().Err(err).Msg("failed to start transaction")
+		return
+	}
+
+	if err := tx.Create(&model_info).Error; err != nil {
+		logger.Log.Error().Err(err).Msg("failed to create host info record")
+		tx.Rollback()
+		return
+	}
+
+	model_temps := make([]models.HostTemperatures, 0)
+	for key, temp := range temps {
+		n := models.HostTemperatures{
+			HostID:          nm.HostID,
+			SensorKey:       key,
+			TemperatureAvg:  temp.Total / float64(temp.Count),
+			TemperatureMin:  temp.Min,
+			TemperatureMax:  temp.Max,
+			CollectedAt:     nm.Metrics[0].DateTime,
+			CollectedMillis: uint64(nm.Metrics[0].Duration),
+		}
+		model_temps = append(model_temps, n)
+	}
+
+	if len(model_temps) > 0 {
+		if err := tx.Create(&model_temps).Error; err != nil {
+			logger.Log.Error().Err(err).Msg("failed to create host temperature records")
+			tx.Rollback()
+			return
+		}
+	}
+	// model_users := make([]models.HostUsers{}, 0)
 
 	nm.FireEvent(STATUS_WAITING)
 }

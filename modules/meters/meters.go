@@ -17,6 +17,22 @@ type Meters struct {
 	// Processes  *Processes  `json:"processes" yaml:"processes"`
 }
 
+type MeterMinMaxAvgInt64 struct {
+	Count int
+	Min   int64
+	Max   int64
+	Avg   int64
+	Total int64
+}
+
+type MeterMinMaxAvgFloat64 struct {
+	Count int
+	Min   float64
+	Max   float64
+	Avg   float64
+	Total float64
+}
+
 func NewMeters(conf *config.Config, db *database.Db) *Meters {
 	nm := &Meters{}
 	nm.conf = conf
