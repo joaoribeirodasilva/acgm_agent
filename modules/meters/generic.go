@@ -19,6 +19,86 @@ const (
 	STATUS_STOPPING
 )
 
+type MeterMinMaxAvgInt64 struct {
+	Count int
+	Min   int64
+	Max   int64
+	Avg   float64
+	Total int64
+}
+
+func (m *MeterMinMaxAvgInt64) Aggregate(value int64) {
+	m.Total += value
+	if m.Min > value {
+		m.Min = value
+	}
+	if m.Max < value {
+		m.Max = value
+	}
+	m.Count++
+	m.Avg = float64(m.Total) / float64(m.Count)
+}
+
+type MeterMinMaxAvgUInt64 struct {
+	Count int
+	Min   uint64
+	Max   uint64
+	Avg   float64
+	Total uint64
+}
+
+func (m *MeterMinMaxAvgUInt64) Aggregate(value uint64) {
+	m.Total += value
+	if m.Min > value {
+		m.Min = value
+	}
+	if m.Max < value {
+		m.Max = value
+	}
+	m.Count++
+	m.Avg = float64(m.Total) / float64(m.Count)
+}
+
+type MeterMinMaxAvgInt struct {
+	Count int
+	Min   int
+	Max   int
+	Avg   float64
+	Total int64
+}
+
+func (m *MeterMinMaxAvgInt) Aggregate(value int) {
+	m.Total += int64(value)
+	if m.Min > value {
+		m.Min = value
+	}
+	if m.Max < value {
+		m.Max = value
+	}
+	m.Count++
+	m.Avg = float64(m.Total) / float64(m.Count)
+}
+
+type MeterMinMaxAvgFloat64 struct {
+	Count int
+	Min   float64
+	Max   float64
+	Avg   float64
+	Total float64
+}
+
+func (m *MeterMinMaxAvgFloat64) Aggregate(value float64) {
+	m.Total += value
+	if m.Min > value {
+		m.Min = value
+	}
+	if m.Max < value {
+		m.Max = value
+	}
+	m.Count++
+	m.Avg = m.Total / float64(m.Count)
+}
+
 type MeterControl struct {
 	name   string
 	host   string

@@ -59,6 +59,7 @@ func main() {
 	meters := meters.NewMeters(config, database)
 	meters.Start()
 	time.Sleep(10 * time.Second)
+	meters.Stop()
 	database.Disconnect()
 	logger.Log.Info().Msg("Terminating ACGM Agent")
 }

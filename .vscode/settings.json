@@ -3,6 +3,7 @@
         "acgm",
         "biqx",
         "cpus",
+        "ctxt",
         "debian",
         "evnt",
         "Fstype",
@@ -11,11 +12,16 @@
         "gorm",
         "iface",
         "ifaces",
+        "Iowait",
         "Mountpoint",
         "Msgf",
         "mysql",
         "ncpu",
         "npartition",
+        "procs",
+        "Procs",
+        "softirq",
+        "Softirq",
         "zerolog"
     ]
 }
