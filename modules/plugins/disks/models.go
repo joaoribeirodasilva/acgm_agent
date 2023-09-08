@@ -1,32 +1,34 @@
-package models
+package disks
 
 import (
 	"fmt"
 	"time"
 
+	"biqx.com.br/acgm_agent/modules/plugins/base"
 	"github.com/shirou/gopsutil/disk"
-	"golang.org/x/exp/slices"
 )
 
-// Place in meter module
-// const (
-// 	MODULE_DISK                        = "disk"
-// 	MODULE_METRIC_DISK_PARTITIONS_NAME = "disk.partitions"
-// 	MODULE_METRIC_DISK_USAGES_NAME     = "disk.usages"
-// 	MODULE_METRIC_DISK_IOS_NAME        = "disk.ios"
-// )
-
 type DiskModel struct {
-	DiskPartitions DiskPartitions `json:"disk_partitions"`
-	DiskUsages     DiskUsages     `json:"disk_usages"`
-	DiskIOs        DiskIOs        `json:"disk_ios"`
+	DiskPartitions *DiskPartitions `json:"disk_partitions"`
+	DiskUsages     *DiskUsages     `json:"disk_usages"`
+	DiskIOs        *DiskIOs        `json:"disk_ios"`
 }
+
+func (o *DiskModel) Factory(host_id int64) {
+	o.NewDiskPartitions(host_id)
+	o.NewDiskUsages(host_id)
+	o.NewDiskIOs(host_id)
+}
+
+/***************************************************************************************************
+ * Disk partitions
+ */
 
 // Disk partition data model
 // For each partition only on row is generated on the
 // database.
 type DiskPartition struct {
-	ModelCommon
+	base.ModelCommon
 	Device     string `json:"device" gorm:"column:device;type:string;size:100"`
 	MountPoint string `json:"mount_point" gorm:"column:mount_point;type:string;size:255"`
 	FSType     string `json:"fs_type" gorm:"column:fs_type;type:string;size:100"`
@@ -42,20 +44,18 @@ func (d *DiskPartition) TableName() string {
 // Holds the disk partitions information and it's
 // model records
 type DiskPartitions struct {
-	ModelListCommon
+	base.ModelListCommon
 	PartitionID int64
-	Stats       []*disk.PartitionStat
-	Aggregated  map[string]*DiskPartition
+	Stats       map[string]*DiskPartition
 }
 
 // NewDiskPartitions returns a new DiskPartitions object and
 // sets it into the DiskModel object receiver member with the
 // same name
 func (o *DiskModel) NewDiskPartitions(host_id int64) *DiskPartitions {
-	o.DiskPartitions = DiskPartitions{}
+	o.DiskPartitions = &DiskPartitions{}
 	o.DiskPartitions.HostID = host_id
-	o.DiskPartitions.Single = true
-	return &o.DiskPartitions
+	return o.DiskPartitions
 }
 
 // AddStat adds a "github.com/shirou/gopsutil/disk" PartitionStat
@@ -78,50 +78,29 @@ func (o *DiskPartitions) AddStat(i []*disk.PartitionStat, collect_duration int64
 		o.CollectedMax = collect_duration
 	}
 
-	o.Stats = append(o.Stats, i...)
-
-}
-
-// Aggregate aggregates the several "github.com/shirou/gopsutil/disk"
-// PartitionStat present in the Stats array performing any necessary
-// calculations filling the DiskPartitions models inserting them into
-// it's Aggregated member to be stored in the
-// database.
-// If the member Stats is an empty array an error is returned
-func (o *DiskPartitions) Aggregate() error {
-
-	if len(o.Stats) == 0 {
-		return fmt.Errorf("no partition stats to aggregate")
-	}
-
-	mounts := make([]string, 0)
-	for _, stat := range o.Stats {
-		if !slices.Contains(mounts, stat.Mountpoint) {
-			disk_partition := DiskPartition{
-				Device:     stat.Device,
-				MountPoint: stat.Mountpoint,
-				FSType:     stat.Fstype,
-				Options:    stat.Opts,
-			}
-			disk_partition.HostID = o.HostID
-			disk_partition.CollectedAt = o.CollectedEnd
-			mounts = append(mounts, stat.Mountpoint)
-			o.Aggregated = append(o.Aggregated, &disk_partition)
+	for _, stat := range i {
+		if _, ok := o.Stats[stat.Device]; !ok {
+			o.Stats[stat.Device] = &DiskPartition{}
 		}
+		o.Stats[stat.Device].Device = stat.Device
+		o.Stats[stat.Device].HostID = o.HostID
+		o.Stats[stat.Device].FSType = stat.Fstype
+		o.Stats[stat.Device].MountPoint = stat.Mountpoint
+		o.Stats[stat.Device].Options = stat.Opts
+		o.Stats[stat.Device].CollectedAt = o.CollectedEnd
 	}
-	return nil
 }
 
 // Empty resets the DiskPartitions members
 func (o *DiskPartitions) Empty() {
 
-	o.Stats = make([]*disk.PartitionStat, 0)
-	o.Aggregated = make(map[string]*DiskPartition, 0)
+	o.Stats = make(map[string]*DiskPartition, 0)
 	o.CollectedStart = time.Unix(0, 0)
 	o.CollectedEnd = time.Unix(0, 0)
 	o.CollectedAvg = 0
 	o.CollectedMin = 0
 	o.CollectedMax = 0
+	o.Count = 0
 }
 
 // GetModels returns the DiskPartitions Aggregated member that contains a
@@ -129,49 +108,44 @@ func (o *DiskPartitions) Empty() {
 // If the Aggregated member is an empty array an error is
 // returned
 func (o *DiskPartitions) GetModels() (*[]*DiskPartition, error) {
-	if len(o.Aggregated) == 0 {
+	if len(o.Stats) == 0 {
 		return nil, fmt.Errorf("no partitions found")
 	}
-	return &o.Aggregated, nil
-}
-
-// GetStats returns the DiskPartitions Stats member that contains a
-// "github.com/shirou/gopsutil/disk" PartitionStat array.
-// If the Stats member is an empty array an error is returned
-func (o *DiskPartitions) GetStats() (*[]*disk.PartitionStat, error) {
-	if len(o.Stats) == 0 {
-		return nil, fmt.Errorf("no partitions stats found")
+	rows := make([]*DiskPartition, 0)
+	for _, stat := range o.Stats {
+		rows = append(rows, stat)
 	}
-	return &o.Stats, nil
+	return &rows, nil
 }
 
-// TODO: func (o *DiskPartitions) CollectStats()
+// TODO: func (o *DiskPartitions) MigrateUp()
+// TODO: func (o *DiskPartitions) MigrateDown()
+// TODO: func (o *DiskPartitions) CollectStatsTimes()
 
 func (o *DiskPartitions) FindDevicePartition(device string) (int64, error) {
 
-	for _, partition := range o.Aggregated {
-		if partition.Device == device {
-			return partition.ID, nil
-		}
+	stat, ok := o.Stats[device]
+	if !ok {
+		return 0, fmt.Errorf("partition device %s not found", device)
 	}
-	return 0, fmt.Errorf("partition device %s not found", device)
+	return stat.ID, nil
 }
 
 func (o *DiskPartitions) FindPathPartition(path string) (int64, error) {
 
-	for _, partition := range o.Aggregated {
-		if partition.MountPoint == path {
-			return partition.ID, nil
+	for _, stat := range o.Stats {
+		if stat.MountPoint == path {
+			return stat.ID, nil
 		}
 	}
 	return 0, fmt.Errorf("partition path %s not found", path)
 }
 
-/**
- * Disk partition usage aggregated statistics
+/***************************************************************************************************
+ * Disk usages
  */
 type DiskUsage struct {
-	ModelCommon
+	base.ModelCommon
 	PartitionID          int64   `json:"partition_id" gorm:"column:partition_id;type:int;"`
 	Path                 string  `json:"path" gorm:"column:path;type:int;"`
 	Fstype               string  `json:"fstype" gorm:"column:fstype;type:int;"`
@@ -189,9 +163,6 @@ type DiskUsage struct {
 	UsedPercentMin       float64 `json:"used_percent_min" gorm:"column:used_percent_min;type:float;"`
 	UsedPercentMax       float64 `json:"used_percent_max" gorm:"column:used_percent_max;type:float;"`
 	InodesTotal          uint64  `json:"-" gorm:"-"`
-	InodesTotalAvg       float64 `json:"inodes_total_avg" gorm:"column:inodes_total_avg;type:float;"`
-	InodesTotalMin       uint64  `json:"inodes_total_min" gorm:"column:inodes_total_min;type:int;"`
-	InodesTotalMax       uint64  `json:"inodes_total_max" gorm:"column:inodes_total_max;type:int;"`
 	InodesUsed           uint64  `json:"-" gorm:"-"`
 	InodesUsedAvg        float64 `json:"inodes_used_avg" gorm:"column:inodes_used_avg;type:float;"`
 	InodesUsedMin        uint64  `json:"inodes_used_min" gorm:"column:inodes_used_min;type:int;"`
@@ -211,17 +182,15 @@ func (o *DiskUsage) TableName() string {
 }
 
 type DiskUsages struct {
-	ModelListCommon
-	Stats      []*disk.UsageStat
-	Aggregated map[string]*DiskUsage
+	base.ModelListCommon
+	Stats map[string]*DiskUsage
 }
 
 func (o *DiskModel) NewDiskUsages(host_id int64) *DiskUsages {
 
-	o.DiskUsages = DiskUsages{}
+	o.DiskUsages = &DiskUsages{}
 	o.DiskUsages.HostID = host_id
-	o.DiskUsages.Single = false
-	return &o.DiskUsages
+	return o.DiskUsages
 }
 
 func (o *DiskUsages) AddStat(i []*disk.UsageStat, collect_duration int64) {
@@ -232,9 +201,10 @@ func (o *DiskUsages) AddStat(i []*disk.UsageStat, collect_duration int64) {
 	if len(o.Stats) == 0 {
 		o.CollectedStart = time.Now()
 	}
+	o.Count++
 	o.CollectedEnd = time.Now()
 	o.CollectedTotal += collect_duration
-	o.CollectedAvg = float64(o.CollectedTotal) / float64(len(o.Stats))
+	o.CollectedAvg = float64(o.CollectedTotal) / float64(o.Count)
 	if o.CollectedMin > collect_duration {
 		o.CollectedMin = collect_duration
 	}
@@ -242,34 +212,78 @@ func (o *DiskUsages) AddStat(i []*disk.UsageStat, collect_duration int64) {
 		o.CollectedMax = collect_duration
 	}
 
-	o.Stats = append(o.Stats, i...)
-
-}
-
-func (o *DiskUsages) Aggregate() error {
-
-	if len(o.Stats) == 0 {
-		return fmt.Errorf("no usage stats to aggregate")
-	}
-
-	for _, stat := range o.Stats {
-		if !slices.Contains(paths, stat.Path) {
-			m := DiskUsage{}
+	for _, stat := range i {
+		_, ok := o.Stats[stat.Path]
+		if !ok {
+			o.Stats[stat.Path] = &DiskUsage{}
+		}
+		o.Stats[stat.Path].Count++
+		o.Stats[stat.Path].HostID = o.HostID
+		o.Stats[stat.Path].CollectedAt = o.CollectedEnd
+		o.Stats[stat.Path].Path = stat.Path
+		o.Stats[stat.Path].Fstype = stat.Fstype
+		o.Stats[stat.Path].Total = stat.Total
+		o.Stats[stat.Path].Free += stat.Free
+		o.Stats[stat.Path].FreeAvg = float64(o.Stats[stat.Path].Free) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].FreeMin > stat.Free {
+			o.Stats[stat.Path].FreeMin = stat.Free
+		}
+		if o.Stats[stat.Path].FreeMax < stat.Free {
+			o.Stats[stat.Path].FreeMax = stat.Free
+		}
+		o.Stats[stat.Path].Used += stat.Used
+		o.Stats[stat.Path].UsedAvg = float64(o.Stats[stat.Path].Used) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].UsedMin > stat.Used {
+			o.Stats[stat.Path].UsedMin = stat.Used
+		}
+		if o.Stats[stat.Path].UsedMax < stat.Used {
+			o.Stats[stat.Path].UsedMax = stat.Used
+		}
+		o.Stats[stat.Path].UsedPercent += stat.UsedPercent
+		o.Stats[stat.Path].UsedPercentAvg = float64(o.Stats[stat.Path].UsedPercent) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].UsedPercentMin > stat.UsedPercent {
+			o.Stats[stat.Path].UsedPercentMin = stat.UsedPercent
+		}
+		if o.Stats[stat.Path].UsedPercentMax < stat.UsedPercent {
+			o.Stats[stat.Path].UsedPercentMax = stat.UsedPercent
+		}
+		o.Stats[stat.Path].InodesTotal = stat.InodesTotal
+		o.Stats[stat.Path].InodesUsed += stat.InodesUsed
+		o.Stats[stat.Path].InodesUsedAvg = float64(o.Stats[stat.Path].InodesUsed) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].InodesUsedMin > stat.InodesUsed {
+			o.Stats[stat.Path].InodesUsedMin = stat.InodesUsed
+		}
+		if o.Stats[stat.Path].InodesUsedMax < stat.InodesUsed {
+			o.Stats[stat.Path].InodesUsedMax = stat.InodesUsed
+		}
+		o.Stats[stat.Path].InodesFree += stat.InodesFree
+		o.Stats[stat.Path].InodesFreeAvg = float64(o.Stats[stat.Path].InodesFree) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].InodesFreeMin > stat.InodesFree {
+			o.Stats[stat.Path].InodesFreeMin = stat.InodesFree
+		}
+		if o.Stats[stat.Path].InodesFreeMin < stat.InodesFree {
+			o.Stats[stat.Path].InodesFreeMin = stat.InodesFree
+		}
+		o.Stats[stat.Path].InodesUsedPercent += stat.InodesUsedPercent
+		o.Stats[stat.Path].InodesUsedPercentAvg = float64(o.Stats[stat.Path].InodesUsedPercent) / float64(o.Stats[stat.Path].Count)
+		if o.Stats[stat.Path].InodesUsedPercentMin > stat.InodesUsedPercent {
+			o.Stats[stat.Path].InodesUsedPercentMin = stat.InodesUsedPercent
+		}
+		if o.Stats[stat.Path].InodesUsedPercentMax < stat.InodesUsedPercent {
+			o.Stats[stat.Path].InodesUsedPercentMax = stat.InodesUsedPercent
 		}
 	}
-
-	return nil
 }
 
 func (o *DiskUsages) Empty() {
 
-	o.Stats = make([]*disk.UsageStat, 0)
-	o.Aggregated = make([]*DiskUsage, 0)
+	o.Stats = make(map[string]*DiskUsage, 0)
 	o.CollectedStart = time.Unix(0, 0)
 	o.CollectedEnd = time.Unix(0, 0)
 	o.CollectedAvg = 0
 	o.CollectedMin = 0
 	o.CollectedMax = 0
+	o.Count = 0
 }
 
 // GetModels returns the DiskUsage Aggregated member that contains a
@@ -277,28 +291,27 @@ func (o *DiskUsages) Empty() {
 // If the Aggregated member is an empty array an error is
 // returned
 func (o *DiskUsages) GetModels() (*[]*DiskUsage, error) {
-	if len(o.Aggregated) == 0 {
+	if len(o.Stats) == 0 {
 		return nil, fmt.Errorf("no usages found")
 	}
-	return &o.Aggregated, nil
+	rows := make([]*DiskUsage, 0)
+	for _, stat := range o.Stats {
+		rows = append(rows, stat)
+	}
+	return &rows, nil
 }
 
-// GetStats returns the DiskUsages Stats member that contains a
-// "github.com/shirou/gopsutil/disk" DiskUsages array.
-// If the Stats member is an empty array an error is returned
-func (o *DiskUsages) GetStats() (*[]*disk.UsageStat, error) {
-	if len(o.Stats) == 0 {
-		return nil, fmt.Errorf("no usages stats found")
-	}
-	return &o.Stats, nil
-}
+/***************************************************************************************************
+ * Disk input and output
+ */
 
 /**
  * Disk partition IO aggregated statistics
  */
 type DiskIO struct {
-	ModelCommon
+	base.ModelCommon
 	PartitionID         int64   `json:"partition_id" gorm:"column:partition_id;type:int;"`
+	Device              string  `json:"device" gorm:"column:device;type:string;size:255;"`
 	Name                string  `json:"name" gorm:"column:name;type:string;size:255;"`
 	SerialNumber        string  `json:"serial_number" gorm:"column:serial_number;type:string;size:100;"`
 	Label               string  `json:"label" gorm:"column:label;type:string;size:255;"`
@@ -318,7 +331,7 @@ type DiskIO struct {
 	MergedWriteCountAvg float64 `json:"merged_write_count_avg" gorm:"column:merged_write_count_avg;type:float;"`
 	MergedWriteCountMin uint64  `json:"merged_write_count_min" gorm:"column:merged_write_count_min;type:int;"`
 	MergedWriteCountMax uint64  `json:"merged_write_count_max" gorm:"column:merged_write_count_max;type:int;"`
-	ReadBytes           float64 `json:"-" gorm:"-"`
+	ReadBytes           uint64  `json:"-" gorm:"-"`
 	ReadBytesAvg        float64 `json:"read_bytes_avg" gorm:"column:read_bytes_avg;type:float;"`
 	ReadBytesMin        uint64  `json:"read_bytes_min" gorm:"column:read_bytes_min;type:int;"`
 	ReadBytesMax        uint64  `json:"read_bytes_max" gorm:"column:read_bytes_max;type:int;"`
@@ -353,20 +366,18 @@ func (o *DiskIO) TableName() string {
 }
 
 type DiskIOs struct {
-	ModelListCommon
-	Stats      []*disk.IOCountersStat
-	Aggregated map[string]*DiskIO
+	base.ModelListCommon
+	Stats map[string]*DiskIO
 }
 
 func (o *DiskModel) NewDiskIOs(host_id int64) *DiskIOs {
 
-	o.DiskIOs = DiskIOs{}
+	o.DiskIOs = &DiskIOs{}
 	o.DiskIOs.HostID = host_id
-	o.DiskIOs.Single = false
-	return &o.DiskIOs
+	return o.DiskIOs
 }
 
-func (o *DiskIOs) AddStat(i []*disk.IOCountersStat, collect_duration int64) {
+func (o *DiskIOs) AddStat(i map[string]*disk.IOCountersStat, collect_duration int64) {
 
 	if len(i) == 0 {
 		return
@@ -374,9 +385,10 @@ func (o *DiskIOs) AddStat(i []*disk.IOCountersStat, collect_duration int64) {
 	if len(o.Stats) == 0 {
 		o.CollectedStart = time.Now()
 	}
+	o.Count++
 	o.CollectedEnd = time.Now()
 	o.CollectedTotal += collect_duration
-	o.CollectedAvg = float64(o.CollectedTotal) / float64(len(o.Stats))
+	o.CollectedAvg = float64(o.CollectedTotal) / float64(o.Count)
 	if o.CollectedMin > collect_duration {
 		o.CollectedMin = collect_duration
 	}
@@ -384,25 +396,118 @@ func (o *DiskIOs) AddStat(i []*disk.IOCountersStat, collect_duration int64) {
 		o.CollectedMax = collect_duration
 	}
 
-	o.Stats = append(o.Stats, i...)
-
-}
-
-func (o *DiskIOs) Aggregate() error {
-
-	// r := &DiskUsage{}
-	return nil
+	for device, stat := range i {
+		_, ok := o.Stats[device]
+		if !ok {
+			o.Stats[device] = &DiskIO{}
+		}
+		o.Stats[device].Count++
+		o.Stats[device].HostID = o.HostID
+		o.Stats[device].CollectedAt = o.CollectedEnd
+		o.Stats[device].Device = device
+		o.Stats[device].Name = stat.Name
+		o.Stats[device].SerialNumber = stat.SerialNumber
+		o.Stats[device].Label = stat.Label
+		o.Stats[device].ReadCount += stat.ReadCount
+		o.Stats[device].ReadCountAvg = float64(o.Stats[device].ReadCount) / float64(o.Stats[device].Count)
+		if o.Stats[device].ReadCountMin > o.Stats[device].ReadCount {
+			o.Stats[device].ReadCountMin = o.Stats[device].ReadCount
+		}
+		if o.Stats[device].ReadCountMax < o.Stats[device].ReadCount {
+			o.Stats[device].ReadCountMax = o.Stats[device].ReadCount
+		}
+		o.Stats[device].MergedReadCount += stat.MergedReadCount
+		o.Stats[device].MergedReadCountAvg = float64(o.Stats[device].MergedReadCount) / float64(o.Stats[device].Count)
+		if o.Stats[device].MergedReadCountMin > o.Stats[device].MergedReadCount {
+			o.Stats[device].MergedReadCountMin = o.Stats[device].MergedReadCount
+		}
+		if o.Stats[device].MergedReadCountMax < o.Stats[device].MergedReadCount {
+			o.Stats[device].MergedReadCountMax = o.Stats[device].MergedReadCount
+		}
+		o.Stats[device].WriteCount += stat.WriteCount
+		o.Stats[device].WriteCountAvg = float64(o.Stats[device].WriteCount) / float64(o.Stats[device].Count)
+		if o.Stats[device].WriteCountMin > o.Stats[device].WriteCount {
+			o.Stats[device].WriteCountMin = o.Stats[device].WriteCount
+		}
+		if o.Stats[device].WriteCountMax < o.Stats[device].WriteCount {
+			o.Stats[device].WriteCountMax = o.Stats[device].WriteCount
+		}
+		o.Stats[device].MergedWriteCount += stat.MergedWriteCount
+		o.Stats[device].MergedWriteCountAvg = float64(o.Stats[device].MergedWriteCount) / float64(o.Stats[device].Count)
+		if o.Stats[device].MergedWriteCountMin > o.Stats[device].MergedWriteCount {
+			o.Stats[device].MergedWriteCountMin = o.Stats[device].MergedWriteCount
+		}
+		if o.Stats[device].MergedWriteCountMax < o.Stats[device].MergedWriteCount {
+			o.Stats[device].MergedWriteCountMax = o.Stats[device].MergedWriteCount
+		}
+		o.Stats[device].ReadBytes += stat.ReadBytes
+		o.Stats[device].ReadBytesAvg = float64(o.Stats[device].ReadBytes) / float64(o.Stats[device].Count)
+		if o.Stats[device].ReadBytesMin > o.Stats[device].ReadBytes {
+			o.Stats[device].ReadBytesMin = o.Stats[device].ReadBytes
+		}
+		if o.Stats[device].ReadBytesMax < o.Stats[device].ReadBytes {
+			o.Stats[device].ReadBytesMax = o.Stats[device].ReadBytes
+		}
+		o.Stats[device].WriteBytes += stat.WriteBytes
+		o.Stats[device].WriteBytesAvg = float64(o.Stats[device].WriteBytes) / float64(o.Stats[device].Count)
+		if o.Stats[device].WriteBytesMin > o.Stats[device].WriteBytes {
+			o.Stats[device].WriteBytesMin = o.Stats[device].WriteBytes
+		}
+		if o.Stats[device].WriteBytesMax < o.Stats[device].WriteBytes {
+			o.Stats[device].WriteBytesMax = o.Stats[device].WriteBytes
+		}
+		o.Stats[device].ReadTime += stat.ReadTime
+		o.Stats[device].ReadTimeAvg = float64(o.Stats[device].ReadTime) / float64(o.Stats[device].Count)
+		if o.Stats[device].ReadTimeMin > o.Stats[device].ReadTime {
+			o.Stats[device].ReadTimeMin = o.Stats[device].ReadTime
+		}
+		if o.Stats[device].ReadTimeMax < o.Stats[device].ReadTime {
+			o.Stats[device].ReadTimeMax = o.Stats[device].ReadTime
+		}
+		o.Stats[device].WriteTime += stat.WriteTime
+		o.Stats[device].WriteTimeAvg = float64(o.Stats[device].WriteTime) / float64(o.Stats[device].Count)
+		if o.Stats[device].WriteTimeMin > o.Stats[device].WriteTime {
+			o.Stats[device].WriteTimeMin = o.Stats[device].WriteTime
+		}
+		if o.Stats[device].WriteTimeMax < o.Stats[device].WriteTime {
+			o.Stats[device].WriteTimeMax = o.Stats[device].WriteTime
+		}
+		o.Stats[device].IopsInProgress += stat.IopsInProgress
+		o.Stats[device].IopsInProgressAvg = float64(o.Stats[device].IopsInProgress) / float64(o.Stats[device].Count)
+		if o.Stats[device].IopsInProgressMin > o.Stats[device].IopsInProgress {
+			o.Stats[device].IopsInProgressMin = o.Stats[device].IopsInProgress
+		}
+		if o.Stats[device].IopsInProgressMax < o.Stats[device].IopsInProgress {
+			o.Stats[device].IopsInProgressMax = o.Stats[device].IopsInProgress
+		}
+		o.Stats[device].IoTime += stat.IoTime
+		o.Stats[device].IoTimeAvg = float64(o.Stats[device].IoTime) / float64(o.Stats[device].Count)
+		if o.Stats[device].IoTimeMin > o.Stats[device].IoTime {
+			o.Stats[device].IoTimeMin = o.Stats[device].IoTime
+		}
+		if o.Stats[device].IoTimeMax < o.Stats[device].IoTime {
+			o.Stats[device].IoTimeMax = o.Stats[device].IoTime
+		}
+		o.Stats[device].WeightedIO += stat.WeightedIO
+		o.Stats[device].WeightedIOAvg = float64(o.Stats[device].WeightedIO) / float64(o.Stats[device].Count)
+		if o.Stats[device].WeightedIOMin > o.Stats[device].WeightedIO {
+			o.Stats[device].WeightedIOMin = o.Stats[device].WeightedIO
+		}
+		if o.Stats[device].WeightedIOMax < o.Stats[device].WeightedIO {
+			o.Stats[device].WeightedIOMax = o.Stats[device].WeightedIO
+		}
+	}
 }
 
 func (o *DiskIOs) Empty() {
 
-	o.Stats = make([]*disk.IOCountersStat, 0)
-	o.Aggregated = make([]*DiskIO, 0)
+	o.Stats = make(map[string]*DiskIO, 0)
 	o.CollectedStart = time.Unix(0, 0)
 	o.CollectedEnd = time.Unix(0, 0)
 	o.CollectedAvg = 0
 	o.CollectedMin = 0
 	o.CollectedMax = 0
+	o.Count = 0
 }
 
 // GetModels returns the DiskIOs Aggregated member that contains a
@@ -410,18 +515,12 @@ func (o *DiskIOs) Empty() {
 // If the Aggregated member is an empty array an error is
 // returned
 func (o *DiskIOs) GetModels() (*[]*DiskIO, error) {
-	if len(o.Aggregated) == 0 {
-		return nil, fmt.Errorf("no ios found")
-	}
-	return &o.Aggregated, nil
-}
-
-// GetStats returns the DiskUsages Stats member that contains a
-// "github.com/shirou/gopsutil/disk" DiskUsages array.
-// If the Stats member is an empty array an error is returned
-func (o *DiskIOs) GetStats() (*[]*disk.IOCountersStat, error) {
 	if len(o.Stats) == 0 {
-		return nil, fmt.Errorf("no is stats found")
+		return nil, fmt.Errorf("no disk io data found")
 	}
-	return &o.Stats, nil
+	rows := make([]*DiskIO, 0)
+	for _, stat := range o.Stats {
+		rows = append(rows, stat)
+	}
+	return &rows, nil
 }

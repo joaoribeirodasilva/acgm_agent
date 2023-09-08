@@ -8,10 +8,11 @@ The ACGM Agent is an agent software that is placed alongside the docker containe
 
 ## TODOS
 
+* Transform meters in plugable modules
+* Allow meter module migration (create module tables, update tables as necessary) gorm migrator
 * Remake meters code (after testing functionality)
 * Store the original data in the database
 * NGINX Logs meter
 * NGINX module (C++) ????
-* Transform meters in plugable modules
 * Use Go-mq module for module communication
 * NGIX configuration easy

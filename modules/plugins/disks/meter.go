@@ -1,10 +1,10 @@
-package meters
+package disks
 
-import (
-	"time"
-
-	"biqx.com.br/acgm_agent/modules/config"
-	"github.com/shirou/gopsutil/disk"
+const (
+	MODULE                             = "disk"
+	MODULE_METRIC_DISK_PARTITIONS_NAME = "disk.partitions"
+	MODULE_METRIC_DISK_USAGES_NAME     = "disk.usages"
+	MODULE_METRIC_DISK_IOS_NAME        = "disk.ios"
 )
 
 var IgnoreFileSystems = []string{
@@ -34,26 +34,74 @@ var IgnoreFileSystems = []string{
 	"fusectl",
 }
 
-var PARTITIONS_THREAD_NAME = "disk"
+var M Meter
 
-type Partition struct {
-	Info     disk.PartitionStat  `json:"info" yaml:"info"`
-	Usage    disk.UsageStat      `json:"usage" yaml:"usage"`
-	Counters disk.IOCountersStat `json:"counters" yaml:"counters"`
+func (m *Meter) Factory(host_id int64, active bool, interval int64, aggregate int64) (*Meter, error) {
+
+	m.model = &DiskModel{}
+	m.name = MODULE
+	m.metrics = []string{
+		MODULE_METRIC_DISK_PARTITIONS_NAME,
+		MODULE_METRIC_DISK_USAGES_NAME,
+		MODULE_METRIC_DISK_IOS_NAME,
+	}
+	m.conf.host_id = host_id
+	m.conf.active = active
+	m.conf.interval = interval
+	m.conf.aggregate = aggregate
+	m.status = STATUS_STOPPED
+	model := m.model.(*DiskModel)
+	model.Factory(host_id)
+
+	return m, nil
 }
 
-type Partitions struct {
-	DateTime  time.Time   `json:"date_time" yaml:"date_time"`
-	Partition []Partition `json:"Partition" yaml:"Partition"`
+func (m *Meter) Start() error {
+	if !m.conf.active {
+		return nil
+	}
+	m.Polling()
+	return nil
 }
 
-type MetricsPartition struct {
-	Metrics     []Partitions   `json:"metrics" yaml:"metrics"`
-	config      *config.Config `json:"-" yaml:"-"`
-	init_failed bool           `json:"-" yaml:"-"`
-	collecting  bool           `json:"-" yaml:"-"`
-	cutting     bool           `json:"-" yaml:"-"`
+func (m *Meter) Stop() error {
+	if !m.conf.active {
+		return nil
+	}
+	return nil
 }
+
+func (m *Meter) GetData(meter string) (interface{}, error) {
+
+	return nil, nil
+}
+
+func (m *Meter) GetStatus() PluginStatus {
+	return m.status
+}
+
+func (m *Meter) Polling() error {
+	return nil
+}
+
+// type Partition struct {
+// 	Info     disk.PartitionStat  `json:"info" yaml:"info"`
+// 	Usage    disk.UsageStat      `json:"usage" yaml:"usage"`
+// 	Counters disk.IOCountersStat `json:"counters" yaml:"counters"`
+// }
+
+// type Partitions struct {
+// 	DateTime  time.Time   `json:"date_time" yaml:"date_time"`
+// 	Partition []Partition `json:"Partition" yaml:"Partition"`
+// }
+
+// type MetricsPartition struct {
+// 	Metrics     []Partitions   `json:"metrics" yaml:"metrics"`
+// 	config      *config.Config `json:"-" yaml:"-"`
+// 	init_failed bool           `json:"-" yaml:"-"`
+// 	collecting  bool           `json:"-" yaml:"-"`
+// 	cutting     bool           `json:"-" yaml:"-"`
+// }
 
 // func (nm *MetricsPartition) GetPartitions(p *Partitions) error {
 // 	if nm.init_failed {
