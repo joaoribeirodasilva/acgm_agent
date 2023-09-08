@@ -1,6 +1,9 @@
 package base
 
-import "fmt"
+import (
+	"fmt"
+	"plugin"
+)
 
 type PluginStatus int
 
@@ -63,7 +66,7 @@ func (p *PluginBase) Factory(name string, conf *Configuration) error {
 
 	var err error
 	p.conf = conf
-	p.plugin, err = p.load_plugin(name)
+	err = p.load_plugin(name)
 	return err
 }
 
@@ -115,10 +118,29 @@ func (p *PluginBase) GetStatus() PluginStatus {
 	return p.plugin.GetStatus()
 }
 
-func (p *PluginBase) load_plugin(name string) (InterfacePlugin, error) {
-	return nil, nil
+func (p *PluginBase) load_plugin(name string) error {
+
+	mod := fmt.Sprintf("./plugins/%s.so", name)
+	plug, err := plugin.Open(mod)
+	if err != nil {
+		p.plugin = nil
+		return err
+	}
+	temp, err := plug.Lookup("M")
+	if err != nil {
+		plug = nil
+		return err
+	}
+	var ok bool
+	p.plugin, ok = temp.(InterfacePlugin)
+	if !ok {
+		return fmt.Errorf("plugin %s does not implement InterfacePlugin interface", name)
+	}
+
+	return nil
 }
 
 func (p *PluginBase) is_loaded() bool {
+
 	return p.plugin != nil
 }
