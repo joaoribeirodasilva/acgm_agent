@@ -14,10 +14,11 @@ type DiskModel struct {
 	DiskIOs        *DiskIOs        `json:"disk_ios"`
 }
 
-func (o *DiskModel) Factory(host_id int64) {
+func (o *DiskModel) Factory(host_id int64) error {
 	o.NewDiskPartitions(host_id)
 	o.NewDiskUsages(host_id)
 	o.NewDiskIOs(host_id)
+	return nil
 }
 
 /***************************************************************************************************
@@ -60,9 +61,9 @@ func (o *DiskModel) NewDiskPartitions(host_id int64) *DiskPartitions {
 
 // AddStat adds a "github.com/shirou/gopsutil/disk" PartitionStat
 // object into the DiskPartitions receiver Stats array
-func (o *DiskPartitions) AddStat(i []*disk.PartitionStat, collect_duration int64) {
+func (o *DiskPartitions) AddStat(i *[]disk.PartitionStat, collect_duration int64) {
 
-	if len(i) == 0 {
+	if i == nil || len(*i) == 0 {
 		return
 	}
 	if len(o.Stats) == 0 {
@@ -78,7 +79,7 @@ func (o *DiskPartitions) AddStat(i []*disk.PartitionStat, collect_duration int64
 		o.CollectedMax = collect_duration
 	}
 
-	for _, stat := range i {
+	for _, stat := range *i {
 		if _, ok := o.Stats[stat.Device]; !ok {
 			o.Stats[stat.Device] = &DiskPartition{}
 		}
@@ -193,9 +194,9 @@ func (o *DiskModel) NewDiskUsages(host_id int64) *DiskUsages {
 	return o.DiskUsages
 }
 
-func (o *DiskUsages) AddStat(i []*disk.UsageStat, collect_duration int64) {
+func (o *DiskUsages) AddStat(i *[]disk.UsageStat, collect_duration int64) {
 
-	if len(i) == 0 {
+	if i == nil || len(*i) == 0 {
 		return
 	}
 	if len(o.Stats) == 0 {
@@ -212,7 +213,7 @@ func (o *DiskUsages) AddStat(i []*disk.UsageStat, collect_duration int64) {
 		o.CollectedMax = collect_duration
 	}
 
-	for _, stat := range i {
+	for _, stat := range *i {
 		_, ok := o.Stats[stat.Path]
 		if !ok {
 			o.Stats[stat.Path] = &DiskUsage{}
@@ -377,9 +378,9 @@ func (o *DiskModel) NewDiskIOs(host_id int64) *DiskIOs {
 	return o.DiskIOs
 }
 
-func (o *DiskIOs) AddStat(i map[string]*disk.IOCountersStat, collect_duration int64) {
+func (o *DiskIOs) AddStat(i *map[string]disk.IOCountersStat, collect_duration int64) {
 
-	if len(i) == 0 {
+	if i == nil || len(*i) == 0 {
 		return
 	}
 	if len(o.Stats) == 0 {
@@ -396,7 +397,7 @@ func (o *DiskIOs) AddStat(i map[string]*disk.IOCountersStat, collect_duration in
 		o.CollectedMax = collect_duration
 	}
 
-	for device, stat := range i {
+	for device, stat := range *i {
 		_, ok := o.Stats[device]
 		if !ok {
 			o.Stats[device] = &DiskIO{}

@@ -10,6 +10,7 @@ type PluginStatus int
 const (
 	STATUS_UNKNOWN PluginStatus = iota
 	STATUS_PLUGIN_NOT_FOUND
+	STATUS_ERROR
 	STATUS_DISABLED
 	STATUS_STOPPED
 	STATUS_STOPPING
@@ -22,6 +23,7 @@ const (
 var plugin_status_strings = map[PluginStatus]string{
 	STATUS_UNKNOWN:          "unknown",
 	STATUS_PLUGIN_NOT_FOUND: "not found",
+	STATUS_ERROR:            "error",
 	STATUS_DISABLED:         "disabled",
 	STATUS_STOPPED:          "stopped",
 	STATUS_STOPPING:         "stopping",
@@ -40,7 +42,7 @@ func (s PluginStatus) String() string {
 }
 
 type Configuration struct {
-	host_id   int64
+	host_id   int64 // não precisa passar o software sabe quando for inserir o registro
 	active    bool
 	interval  int64
 	aggregate int64
@@ -51,7 +53,10 @@ type InterfacePlugin interface {
 	Factory() error
 	Start() error
 	Stop() error
+	GetName() string
+	GetMetrics() []string
 	GetData(meter string) (interface{}, error)
+	GetDataCount(meter string) (int, error)
 	GetStatus() PluginStatus
 	SetStatus(status PluginStatus)
 	Polling() error
@@ -59,15 +64,21 @@ type InterfacePlugin interface {
 
 type PluginBase struct {
 	conf   *Configuration
+	db     *Db
 	plugin InterfacePlugin
 }
 
-func (p *PluginBase) Factory(name string, conf *Configuration) error {
+func (p *PluginBase) Factory(name string, db *Db, conf *Configuration) error {
 
-	var err error
+	p.db = db
 	p.conf = conf
-	err = p.load_plugin(name)
-	return err
+	if err := p.load_plugin(name); err != nil {
+		return err
+	}
+	if err := p.plugin.Factory(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (p *PluginBase) Start() error {
@@ -95,6 +106,7 @@ func (p *PluginBase) Polling() (bool, error) {
 		return false, fmt.Errorf("plugin not found")
 	}
 
+	// Go func por métrica mas acomodando estrutura prioritárias das quais as outras dependam
 	go func() {
 		err = p.plugin.Polling() //poling by active metric
 		// store errors (as warning. best effort theory)
